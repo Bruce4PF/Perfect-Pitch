@@ -16,6 +16,7 @@ const BLACK_W = 18;
 /** Served from /public — same nested folder name as the FreePats pack. */
 const PIANO_PACK_BASE =
   "/UprightPianoKW-SFZ+FLAC-20220221/UprightPianoKW-SFZ+FLAC-20220221/";
+const PIANO_PACK_BASE_FALLBACK = "/UprightPianoKW-SFZ+FLAC-20220221/";
 
 const SFZ_REGIONS_VL = [
   { lo: 21, hi: 22, center: 21, file: "samples/A0vL.flac" },
@@ -100,11 +101,19 @@ function leftWhiteMidiForBlack(midi) {
   return x;
 }
 
-function urlForPackFile(relPath) {
-  return (
-    PIANO_PACK_BASE +
-    relPath.split("/").map(encodeURIComponent).join("/")
-  );
+function encodePathSegments(relPath) {
+  return relPath.split("/").map(encodeURIComponent).join("/");
+}
+
+function candidateUrlsForPackFile(relPath) {
+  const encoded = encodePathSegments(relPath);
+  const doubleEncodedHash = encoded.replaceAll("%23", "%2523");
+  return [
+    PIANO_PACK_BASE + encoded,
+    PIANO_PACK_BASE + doubleEncodedHash,
+    PIANO_PACK_BASE_FALLBACK + encoded,
+    PIANO_PACK_BASE_FALLBACK + doubleEncodedHash,
+  ];
 }
 
 function sleep(ms) {
@@ -179,12 +188,27 @@ export default function PitchGame() {
     async (relPath) => {
       const cache = bufferCacheRef.current;
       if (cache.has(relPath)) return;
-      const url = urlForPackFile(relPath);
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status} for ${relPath}`);
-      const ab = await res.arrayBuffer();
-      const buf = await decodeBuffer(ab);
-      cache.set(relPath, buf);
+      const urls = candidateUrlsForPackFile(relPath);
+      let lastErr = null;
+
+      for (let i = 0; i < urls.length; i++) {
+        const url = urls[i];
+        try {
+          const res = await fetch(url);
+          if (!res.ok) {
+            lastErr = new Error(`HTTP ${res.status} for ${relPath} via ${url}`);
+            continue;
+          }
+          const ab = await res.arrayBuffer();
+          const buf = await decodeBuffer(ab);
+          cache.set(relPath, buf);
+          return;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+
+      throw lastErr ?? new Error(`Could not load ${relPath}`);
     },
     [decodeBuffer]
   );
