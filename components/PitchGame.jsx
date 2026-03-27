@@ -108,11 +108,13 @@ function encodePathSegments(relPath) {
 function candidateUrlsForPackFile(relPath) {
   const encoded = encodePathSegments(relPath);
   const doubleEncodedHash = encoded.replaceAll("%23", "%2523");
+  const apiPath = encodeURIComponent(relPath);
   return [
     PIANO_PACK_BASE + encoded,
     PIANO_PACK_BASE + doubleEncodedHash,
     PIANO_PACK_BASE_FALLBACK + encoded,
     PIANO_PACK_BASE_FALLBACK + doubleEncodedHash,
+    `/api/piano-sample?path=${apiPath}`,
   ];
 }
 
